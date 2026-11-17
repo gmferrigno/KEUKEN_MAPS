@@ -10,6 +10,7 @@ import { ModeContext } from "../../contexts/mode.context";
 import { MenuContext } from "../../contexts/menu.context";
 import { BoxContext } from "../../contexts/box.context";
 import { EditPolygonContext, type IEditPolygonHandler } from "../../contexts/polygonEdit.context";
+import { GeoreferenceEditContext, type IGeoreferenceEditHandler } from "../../contexts/georeferenceEdit.context";
 import { ViewContext } from "../../contexts/view.context";
 import { ListViewContext } from "../../contexts/listView.context";
 
@@ -87,6 +88,14 @@ export const useEditPolygonRef = (): IEditPolygonHandler => {
       }
 
       return context;
+};
+
+export const useGeoreferenceEditRef = (): IGeoreferenceEditHandler => {
+    const context = useContext(GeoreferenceEditContext);
+    if (!context) {
+        throw new Error("GeoreferenceEditContext not initialized");
+    }
+    return context;
 };
 
 export const useListViewContentRef = () => {

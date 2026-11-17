@@ -14,7 +14,7 @@ import moment from 'moment';
 import { getStartPointIcon, timeStampIcon, getDeliveryClientIcon, getDriverIcon } from '../../../../utils/helpers/orderIconPicker';
 import TimeStampModal from '../../components/timeStampModal';
 import DriverModal from '../../components/driverModal';
-import { useDriverRenderRef, useMapDriverObserverContext, useModalRef, useModeRef } from '../../../../utils/hooks/map/useContextRef';
+import { useDriverRenderRef, useGeoreferenceEditRef, useMapDriverObserverContext, useMenuRef, useModalRef, useModeRef } from '../../../../utils/hooks/map/useContextRef';
 import { flattenIds, getIntersection, getVisibilityState } from '../../../../utils/helpers/visibility';
 import type { TNestedRoutes } from '../../../../utils/types/driverObserver/drivers.types';
 import type { ISSERoute } from '../../../../utils/types/sellerObserver/sellers.types';
@@ -24,6 +24,9 @@ import { addRoutePoint, changeFocus, isFocussed, setIsAnimating } from '../../..
 import { deliveryClientKey } from '../../../../store/slices/driverObserver/clientsSlice';
 import { renderToString } from 'react-dom/server';
 import DeliveryClientTooltip from '../../components/deliveryClientTooltip';
+import ClientGeorefMenu from '../../components/clientGeorefMenu';
+import CustomMenu from '../../../../components/menu';
+import GeoreferenceToolbar from '../../../../components/georeferenceToolbar';
 import { getLastPositionByPhone } from '../../../../services/locations.service';
 import useDeliveryClientActions from '../../../../utils/hooks/map/useDeliveryClientActions';
 import { lastPositionToRoute, MqttToRoute } from '../../../../utils/helpers/routeParser';
@@ -79,6 +82,13 @@ const MapView = () => {
 
   const { mapInteractions } = useModeRef();
   const { OpenModal } = useModalRef();
+  const { OpenMenu } = useMenuRef();
+  const {
+    isEditing: isGeorefEditing,
+    target: georefTarget,
+    currentCoordinates: georefCoords,
+    handleDragEnd: handleGeorefDragEnd,
+  } = useGeoreferenceEditRef();
 
   const {
     driverElements,
@@ -387,16 +397,54 @@ const MapView = () => {
           ? clientByDeliveryKey[deliveryClientKey(deliveryId, clientId)]
           : null) ?? displayClient;
 
+      const storeCoords: [number, number] = [lat, lng];
+      const isEditingThis =
+        isGeorefEditing &&
+        georefTarget != null &&
+        String(georefTarget.clientId) === String(clientId);
+      const markerCoords =
+        isEditingThis && georefCoords ? georefCoords : storeCoords;
+
       const parsedData: IMarkerCreationProps = {
         target: clientElements,
         id: 'deliveryClients',
         pointData: {
           id: clientId,
-          coordinates: [lat, lng],
+          coordinates: markerCoords,
         },
-        clickAction: () => onClientClick({ client, deliveryId }),
-        leftClickAction: () => onClientLeftClick({ client, deliveryId }),
+        clickAction: () => {
+          if (isGeorefEditing) return;
+          onClientClick({ client, deliveryId });
+        },
+        leftClickAction: (e) => {
+          const originalEvent = e?.originalEvent as MouseEvent | undefined;
+          OpenMenu({
+            Component: ClientGeorefMenu,
+            props: {
+              x: originalEvent?.clientX ?? 0,
+              y: originalEvent?.clientY ?? 0,
+              target: {
+                clientId,
+                clientName: client.name || `Cliente #${clientId}`,
+                originalCoordinates: storeCoords,
+                groupId: deliveryId,
+                source: 'driverObserver',
+                markerMapRef: 'clientMarkers',
+                elementsParentId: 'deliveryClients',
+              },
+              relationLabel: 'Ver punto de visita',
+              onShowRelation: () => onClientLeftClick({ client, deliveryId }),
+            },
+          });
+        },
+        dragAction: isEditingThis
+          ? (latlng) => handleGeorefDragEnd(latlng)
+          : undefined,
+        dragEndAction: isEditingThis
+          ? (latlng) => handleGeorefDragEnd(latlng)
+          : undefined,
         hoverAction: (isHover, e) => {
+          if (isEditingThis) return;
           const currentContent = isHover
             ? renderToString(
                 <DeliveryClientTooltip client={client} deliveryId={deliveryId} />
@@ -412,11 +460,15 @@ const MapView = () => {
           });
         },
         Icon: {
-          size: driverColor ? 22 : 20,
+          size: isEditingThis ? 28 : driverColor ? 22 : 20,
           iconUrl: getDeliveryClientIcon(driverColor, client.isProcessed),
+          zIndexOffset: isEditingThis ? 20000 : undefined,
         },
-        operation: shouldBeVisible ? 'add' : 'remove',
+        operation: shouldBeVisible
+          ? (isEditingThis ? 'redraw' : 'add')
+          : 'remove',
         markerMapRef: 'clientMarkers',
+        isDraggable: isEditingThis,
       };
 
       handleMarkers(parsedData);
@@ -436,6 +488,11 @@ const MapView = () => {
     onClientLeftClick,
     driversUI,
     openTimelineDeliveryId,
+    OpenMenu,
+    isGeorefEditing,
+    georefTarget,
+    georefCoords,
+    handleGeorefDragEnd,
   ]);
 
   // Actions handlers 
@@ -579,9 +636,8 @@ const MapView = () => {
 
   useEffect(() => {
     resetPathElements(clientElements, ['deliveryClients']);
-    clearVisitOverlays();
     clientsMarkers();
-  }, [clientsMarkers, clientElements, resetPathElements, clearVisitOverlays]);
+  }, [clientsMarkers, clientElements, resetPathElements]);
 
   useEffect(() => {
     dispatch(setIsAnimating({ isAnimating: false, driverAnimated: null }));
@@ -771,8 +827,10 @@ const MapView = () => {
   ]);
 
   return (
-    <div className="w-full h-full">
+    <div className="relative w-full h-full">
       <CustomModal />
+      <CustomMenu />
+      <GeoreferenceToolbar />
       <MapContainer context={mapContext} centerOnUserGps={true} autoResize={true} />
     </div>
   );

@@ -60,6 +60,28 @@ const clientsSlice = createSlice({
     changeVisibility(state, action: PayloadAction<boolean>) {
       state.visible = action.payload;
     },
+    updateClientLocationLocal(
+      state,
+      action: PayloadAction<{ clientCode: string; latitude: number; longitude: number }>
+    ) {
+      const { clientCode, latitude, longitude } = action.payload;
+      const index = state.clientsById[clientCode];
+      if (index === undefined) return;
+
+      const client = state.clients[index];
+      if (!client) return;
+
+      client.location = { latitude, longitude };
+
+      const sellerKey = client.mobileUser;
+      const sellerClients = state.clientsBySeller[sellerKey];
+      if (sellerClients) {
+        const sellerIdx = sellerClients.findIndex((c) => String(c.code) === String(clientCode));
+        if (sellerIdx !== -1) {
+          sellerClients[sellerIdx].location = { latitude, longitude };
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -96,5 +118,5 @@ const clientsSlice = createSlice({
   }
 });
 
-export const { changeVisibility, resetClients } = clientsSlice.actions;
+export const { changeVisibility, resetClients, updateClientLocationLocal } = clientsSlice.actions;
 export default clientsSlice.reducer;

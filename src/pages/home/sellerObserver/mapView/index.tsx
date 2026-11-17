@@ -23,7 +23,7 @@ import moment, { type Moment } from 'moment';
 import { addRoutePoint, changeFocus, isFocussed, setIsAnimating, setOnlineStatus } from '../../../../store/slices/sellerObserver/sellersSlice';
 import { getLastPositionByPhone } from '../../../../services/locations.service';
 import OrderModal from '../../components/orderModal';
-import { useMapSellerObserverContext, useMenuRef, useModalRef, useModeRef, useRenderRef } from '../../../../utils/hooks/map/useContextRef';
+import { useGeoreferenceEditRef, useMapSellerObserverContext, useMenuRef, useModalRef, useModeRef, useRenderRef } from '../../../../utils/hooks/map/useContextRef';
 import { lastPositionToRoute, MqttToRoute } from '../../../../utils/helpers/routeParser';
 import useClientActions from '../../../../utils/hooks/map/useClientActions';
 import ClientTooltip from '../../components/clientTooltip';
@@ -32,7 +32,9 @@ import { getClientType } from '../../../../utils/helpers/clientStatus';
 import { formatMinutes } from '../../../../utils/helpers/formatters';
 import { flattenIds, getIntersection, getVisibilityState } from '../../../../utils/helpers/visibility';
 import GeoZoneMenu from '../../components/geozoneMenu';
+import ClientGeorefMenu from '../../components/clientGeorefMenu';
 import CustomMenu from '../../../../components/menu';
+import GeoreferenceToolbar from '../../../../components/georeferenceToolbar';
 import TimeLine from '../../../../components/layouts/sellerObserverLayout/sidebar/components/sellers/components/timeLine';
 import { useContextbarContext } from '../../../../utils/contexts/contextbar.context';
 import type { IClient } from '../../../../utils/types/sellerObserver/clients.types';
@@ -67,6 +69,12 @@ const SellerObserver = () => {
   const { mapInteractions } = useModeRef();
   const { OpenMenu } = useMenuRef();
   const { OpenModal } = useModalRef();
+  const {
+    isEditing: isGeorefEditing,
+    target: georefTarget,
+    currentCoordinates: georefCoords,
+    handleDragEnd: handleGeorefDragEnd,
+  } = useGeoreferenceEditRef();
   const {
     sellerElements,
     historyElements,
@@ -407,17 +415,58 @@ const SellerObserver = () => {
           })
         }
         const isFocus = isFocussed(keyNumber, watchList);
+        const storeCoords: [number, number] = [
+          Number(client.location.latitude),
+          Number(client.location.longitude),
+        ];
+        const isEditingThis =
+          isGeorefEditing &&
+          georefTarget != null &&
+          String(georefTarget.clientId) === String(client.code);
+        const markerCoords =
+          isEditingThis && georefCoords ? georefCoords : storeCoords;
 
         const parsedData: IMarkerCreationProps = {
           target: sellerElements,
           id: keyNumber,
           pointData: {
             id: client.code,
-            coordinates: [Number(client.location.latitude), Number(client.location.longitude)]
+            coordinates: markerCoords,
           },
-          clickAction: () => onClick(getClientType(client), { polylines, keyNumber, client }),
-          leftClickAction: () => onLeftClick(getClientType(client), { polylines, keyNumber, client }),
+          clickAction: () => {
+            if (isGeorefEditing) return;
+            onClick(getClientType(client), { polylines, keyNumber, client });
+          },
+          leftClickAction: (e) => {
+            const originalEvent = e?.originalEvent as MouseEvent | undefined;
+            OpenMenu({
+              Component: ClientGeorefMenu,
+              props: {
+                x: originalEvent?.clientX ?? 0,
+                y: originalEvent?.clientY ?? 0,
+                target: {
+                  clientId: client.code,
+                  clientName: client.name,
+                  originalCoordinates: storeCoords,
+                  groupId: keyNumber,
+                  source: 'sellerObserver',
+                  markerMapRef: 'sellPointMarkers',
+                  elementsParentId: keyNumber,
+                },
+                relationLabel: 'Ver relación a órdenes',
+                onShowRelation: () =>
+                  onLeftClick(getClientType(client), { polylines, keyNumber, client }),
+              },
+            });
+          },
+          dragAction: isEditingThis
+            ? (latlng) => handleGeorefDragEnd(latlng)
+            : undefined,
+          dragEndAction: isEditingThis
+            ? (latlng) => handleGeorefDragEnd(latlng)
+            : undefined,
           hoverAction: ((isHover, e) => {
+            if (isEditingThis) return;
             const currentContent = isHover
               ? renderToString(
                 <ClientTooltip
@@ -437,7 +486,7 @@ const SellerObserver = () => {
             })
           }),
           Icon: {
-            size: isFocus ? 65 : 16,
+            size: isEditingThis ? 28 : isFocus ? 65 : 16,
             iconUrl: getClientIcon(
               getClientType(client),
               (clFirstOrder
@@ -446,12 +495,16 @@ const SellerObserver = () => {
                   ? moment(client.visits[0].start).format('HH:mm:ss')
                   : '-:-:-'),
               formatMinutes(client.totalMinutes),
-              isFocus,
+              isFocus || isEditingThis,
               sellerColor
             ),
+            zIndexOffset: isEditingThis ? 20000 : undefined,
           },
-          operation: getVisibilityState(keyNumber, watchList, filterList).visibleInMap ? (isFocus ? 'redraw' : 'add') : 'remove',
+          operation: getVisibilityState(keyNumber, watchList, filterList).visibleInMap
+            ? (isEditingThis || isFocus ? 'redraw' : 'add')
+            : 'remove',
           markerMapRef: 'sellPointMarkers',
+          isDraggable: isEditingThis,
         }
         handleMarkers(parsedData)
       })
@@ -469,6 +522,11 @@ const SellerObserver = () => {
     onLeftClick,
     sellers,
     sellerElements,
+    OpenMenu,
+    isGeorefEditing,
+    georefTarget,
+    georefCoords,
+    handleGeorefDragEnd,
   ]);
 
 
@@ -611,6 +669,11 @@ const SellerObserver = () => {
       isMounted.current = false;
     };
   }, [sellerOrders, clientsBySeller, watchList, filterList, date, TIMESTAMPS, ORDERS, CLIENTS, ROUTES]);
+
+  useEffect(() => {
+    if (!CLIENTS) return;
+    clientsMarkers();
+  }, [CLIENTS, clientsMarkers]);
 
   useEffect(() => {
     dispatch(setIsAnimating({ isAnimating: false, sellerAnimated: null }))
@@ -781,9 +844,10 @@ const SellerObserver = () => {
   ]);
 
   return (
-    <div className="w-full h-full">
+    <div className="relative w-full h-full">
       <CustomModal />
       <CustomMenu />
+      <GeoreferenceToolbar />
       <MapContainer context={mapContext} centerOnUserGps={true} autoResize={true} />
     </div>
   );

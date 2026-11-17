@@ -144,6 +144,32 @@ export const deliveryClientsSlice = createSlice({
       state.clientByDeliveryKey = action.payload.clientByDeliveryKey;
       state.clientIdsByDeliveryId = action.payload.clientIdsByDeliveryId;
     },
+    updateDeliveryClientLocationLocal(
+      state,
+      action: PayloadAction<{ clientId: number; latitude: number; longitude: number }>
+    ) {
+      const { clientId, latitude, longitude } = action.payload;
+      const nextLocation = { latitude, longitude };
+
+      const apply = (client: IFDeliveryClient | undefined) => {
+        if (!client) return;
+        client.location = nextLocation;
+      };
+
+      apply(state.clientById[clientId]);
+
+      const listIdx = state.clients.findIndex((c) => c.id === clientId || c.clientId === clientId);
+      if (listIdx !== -1) {
+        state.clients[listIdx].location = nextLocation;
+      }
+
+      for (const key of Object.keys(state.clientByDeliveryKey)) {
+        const client = state.clientByDeliveryKey[key];
+        if (client && (client.id === clientId || client.clientId === clientId)) {
+          client.location = nextLocation;
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -167,7 +193,11 @@ export const deliveryClientsSlice = createSlice({
   },
 });
 
-export const { resetDeliveryClients, setDeliveryClients } = deliveryClientsSlice.actions;
+export const {
+  resetDeliveryClients,
+  setDeliveryClients,
+  updateDeliveryClientLocationLocal,
+} = deliveryClientsSlice.actions;
 
 export const selectDeliveryClients = (state: RootState) => state.deliveryClients.clients;
 export const selectDeliveryClientById = (state: RootState) => state.deliveryClients.clientById;

@@ -19,6 +19,7 @@ import ManagerLayout from "../../components/layouts/managerLayout";
 import { useMapDriverObserverContext, useMapPlannerContext, useMapSellerObserverContext } from "../../utils/hooks/map/useContextRef";
 import type { IMapRef } from "@repo/map-core";
 import { EditPolygonProvider } from "../../utils/contexts/polygonEdit.context";
+import { GeoreferenceEditProvider } from "../../utils/contexts/georeferenceEdit.context";
 import DriverObserverLayout from "../../components/layouts/driverObserverLayout";
 import DriverObserver from "./driverObserver";
 import DefaultLayout from "../../components/layouts/defaultLayout";
@@ -56,6 +57,7 @@ const MapModes: Record<TModes, IMode> = {
             MessageProvider,
             MenuProvider,
             EditPolygonProvider,
+            GeoreferenceEditProvider,
             ListViewProvider
         ),
         Layout: SellerObserverLayout,
@@ -68,6 +70,8 @@ const MapModes: Record<TModes, IMode> = {
             DriverRenderProvider,
             ModalProvider,
             MessageProvider,
+            MenuProvider,
+            GeoreferenceEditProvider,
             ListViewProvider
         ),
         Layout: DriverObserverLayout,

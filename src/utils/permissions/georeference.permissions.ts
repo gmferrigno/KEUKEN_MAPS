@@ -3,10 +3,10 @@ type Role = (typeof PERMISSIONS_GEOREFERENCE)[Action][number];
 
 /**
  * Permiso de re-georeferenciación de PDVs.
- * Key backend: GEOREFERENCE_PDV (description: "Georeferenciar PDV").
+ * Key backend: GEOREF_PDV (description: "Georeferenciar PDV").
  */
 export const PERMISSIONS_GEOREFERENCE = {
-  EDIT: ["GEOREFERENCE_PDV"],
+  EDIT: ["GEOREF_PDV"],
 } as const;
 
 export const canDo = (

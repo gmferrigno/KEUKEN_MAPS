@@ -23,7 +23,7 @@ export const updateClientLocation = async (
   return await httpRequest({
     url: `/client/${clientId}/location`,
     method: 'PUT',
-    params: { enterprise : enterprise_id },
+    params: { enterprise_id : enterprise_id },
     isAuth: true,
     data,
   })
